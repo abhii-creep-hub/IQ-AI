@@ -8,7 +8,7 @@ import { formatDate } from '../utils/helpers'
 
 export default function JobsPage() {
   const [showCreate, setShowCreate] = useState(false)
-  const { data: jobs, isLoading } = useJobs()
+  const { data: jobs, isLoading, isError, refetch } = useJobs()
   const createMutation = useCreateJob()
   const deleteMutation = useDeleteJob()
   const { register, handleSubmit, reset, formState: { errors } } = useForm()
@@ -46,6 +46,11 @@ export default function JobsPage() {
         {isLoading ? (
           <div className="flex justify-center py-20">
             <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : isError ? (
+          <div className="text-center py-20 glass-card">
+            <p role="alert" className="text-rose-400">Couldn’t load jobs. Please try again.</p>
+            <button onClick={() => refetch()} className="glass-button mt-4 text-sm">Retry</button>
           </div>
         ) : jobs?.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">

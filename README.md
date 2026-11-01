@@ -1,12 +1,12 @@
 # IQ-AI — AI-Powered Resume Screening & Candidate Intelligence Platform
 
-A production-ready, enterprise-grade recruitment platform that automates resume screening using Large Language Models (LLMs) and NLP. Upload resumes, match against job descriptions, generate ATS scores, rank candidates, and get AI-powered hiring recommendations.
+A recruitment platform that automates resume screening using Large Language Models (LLMs) and NLP. Upload resumes, match against job descriptions, generate ATS scores, rank candidates, and get AI-powered hiring recommendations.
 
 ---
 
 ## Features
 
-- **AI Resume Parsing** — Extract structured data from PDF/DOCX resumes using GPT-4
+- **AI Resume Parsing** — Extract structured data from PDF/DOCX resumes using Google Gemini
 - **ATS Compatibility Scoring** — Detailed score breakdown (0–100) across skills, experience, education, projects, formatting, certifications
 - **Job Description Matching** — AI-powered matching of candidates against JDs
 - **Candidate Ranking** — Gold / Silver / Bronze / Shortlisted / Rejected / Pending tiers
@@ -29,7 +29,7 @@ A production-ready, enterprise-grade recruitment platform that automates resume 
 | Frontend | React 18, Vite, Tailwind CSS, React Router, React Query, Framer Motion, Recharts |
 | Backend | Python 3.12, FastAPI, SQLAlchemy (async), Alembic, Pydantic |
 | Database | PostgreSQL 16 |
-| AI | OpenAI GPT-4, spaCy, Sentence Transformers |
+| AI | Google Gemini API, spaCy, Sentence Transformers |
 | Auth | JWT (python-jose), Passlib (bcrypt) |
 | Infra | Docker, Docker Compose, GitHub Actions CI/CD |
 
@@ -41,7 +41,8 @@ A production-ready, enterprise-grade recruitment platform that automates resume 
 - Python 3.12+
 - Node.js 20+
 - PostgreSQL 16+
-- OpenAI API key
+- Google Gemini API key (needed for resume parsing and AI analysis; a free tier is available with quotas)
+- Tesseract OCR executable (only needed for scanned PDF resumes)
 
 ### 1. Clone & configure
 
@@ -50,6 +51,7 @@ git clone https://github.com/your-org/iq-ai.git
 cd iq-ai
 cp .env.example backend/.env
 # Edit backend/.env with your values
+# Set GEMINI_API_KEY from https://aistudio.google.com/app/apikey
 ```
 
 ### 2. Backend
@@ -71,14 +73,6 @@ npm install
 npm run dev
 ```
 
-### 4. Docker (all-in-one)
-
-```bash
-docker-compose up --build -d
-```
-
-Frontend → http://localhost | Backend API → http://localhost:8000/docs
-
 ---
 
 ## Project Structure
@@ -95,7 +89,7 @@ iq-ai/
 │       ├── database/        # Engine, session, base
 │       ├── core/            # Config, security, enums
 │       ├── middleware/       # Auth, rate limiting
-│       ├── ai/              # OpenAI integration, resume parser
+│       ├── ai/              # Gemini integration, resume parser
 │       ├── prompts/         # LLM prompt templates
 │       ├── utils/           # Helpers
 │       └── main.py
@@ -108,7 +102,6 @@ iq-ai/
 │       ├── services/        # Axios API client
 │       ├── routes/          # React Router config
 │       └── utils/           # Helpers, constants
-├── docker-compose.yml
 ├── .github/workflows/       # CI/CD pipeline
 └── README.md
 ```
@@ -117,12 +110,18 @@ iq-ai/
 
 ## Environment Variables
 
+For a free online demo deployment on Render and Neon, see [docs/free-deployment.md](docs/free-deployment.md). Deployment secrets belong in the hosting dashboards, not in this repository.
+
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...` |
 | `JWT_SECRET_KEY` | JWT signing key | Required |
-| `OPENAI_API_KEY` | OpenAI API key | Required |
-| `OPENAI_MODEL` | GPT model to use | `gpt-4o` |
+| `GEMINI_API_KEY` | Google AI Studio API key | Required for AI analysis |
+| `GEMINI_MODEL` | Gemini model to use | `gemini-3.5-flash-lite` |
+| `GEMINI_BASE_URL` | Gemini OpenAI-compatible API endpoint | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| `AI_TEMPERATURE`, `AI_MAX_TOKENS` | Generation settings | `0.3`, `4096` |
+| `FRONTEND_URL` | Frontend origin used to build password reset links | `http://localhost:5173` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | SMTP delivery for password reset links | SMTP credentials required |
 | `CORS_ORIGINS` | Allowed origins (JSON array) | `["http://localhost:5173"]` |
 | `RATE_LIMIT_PER Minute` | Requests per IP per minute | `60` |
 | `MAX_UPLOAD_SIZE_MB` | Max upload file size | `20` |
@@ -135,6 +134,8 @@ iq-ai/
 Once the backend is running, visit:
 - **Swagger UI**: http://localhost:8000/docs
 - **ReDoc**: http://localhost:8000/redoc
+
+With Docker Compose, the API docs are available at http://localhost/docs.
 
 ### Key Endpoints
 
@@ -175,9 +176,17 @@ pytest tests/ -v
 ## Deployment
 
 ### Docker Compose
+
+From the repository root, create a root `.env` file and set `POSTGRES_PASSWORD` to a long URL-safe random value and `JWT_SECRET_KEY` to a separate random secret of at least 32 characters. Configure SMTP credentials if password reset emails should be delivered, and add a Google Gemini API key to enable AI analysis. The Gemini free tier has quotas and may use submitted prompts to improve Google products, so test with sample resumes rather than real candidate data.
+
 ```bash
-docker-compose up --build -d
+cp .env.example .env
+docker compose up --build -d
 ```
+
+Open the app at http://localhost. To create the first administrator, set `IQAI_ADMIN_EMAIL`, `IQAI_ADMIN_USERNAME`, and a 12-character-or-longer `IQAI_ADMIN_PASSWORD` in `.env`, recreate the backend with `docker compose up -d backend`, then run `docker compose exec backend python seed.py`.
+
+Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` to enable password recovery email. The reset link points to `FRONTEND_URL`.
 
 ### Manual
 1. Set up PostgreSQL and create the database

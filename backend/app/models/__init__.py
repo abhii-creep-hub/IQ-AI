@@ -6,6 +6,8 @@ from app.models.skill import Skill, CandidateSkill
 from app.models.education_experience import Education, Experience, Project, Certification
 from app.models.analysis import InterviewQuestion, ATSResult, AIAnalysis
 from app.models.log_report import ActivityLog, Report
+from app.models.interview import Interview, InterviewFeedback
+from app.models.ai_interview import AIInterviewSession, AIInterviewQuestion
 
 __all__ = [
     "User",
@@ -23,4 +25,8 @@ __all__ = [
     "AIAnalysis",
     "ActivityLog",
     "Report",
+    "Interview",
+    "InterviewFeedback",
+    "AIInterviewSession",
+    "AIInterviewQuestion",
 ]

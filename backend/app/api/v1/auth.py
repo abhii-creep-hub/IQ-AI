@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.schemas.user import (
@@ -9,6 +9,7 @@ from app.schemas.user import (
 from app.services.user_service import UserService
 from app.middleware.auth import get_current_user
 from app.models.user import User
+from app.core.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -22,7 +23,6 @@ async def register(data: UserCreate, db: AsyncSession = Depends(get_db)):
             username=data.username,
             password=data.password,
             full_name=data.full_name,
-            role=data.role,
         )
         return user
     except ValueError as e:
@@ -50,11 +50,20 @@ async def refresh_token(data: RefreshTokenRequest, db: AsyncSession = Depends(ge
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def forgot_password(
+    data: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password reset email is not configured. Set SMTP_USER and SMTP_PASSWORD on the backend.",
+        )
     service = UserService(db)
     token = await service.forgot_password(data.email)
     if token:
-        return MessageResponse(message="Password reset email sent", success=True)
+        background_tasks.add_task(service.send_password_reset_email, data.email, token)
     return MessageResponse(message="If the email exists, a reset link has been sent", success=True)
 
 

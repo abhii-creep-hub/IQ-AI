@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useUploadMultipleResumes, useParseAndAnalyze, useJobs } from '../hooks/useQueries'
@@ -31,6 +32,25 @@ export default function UploadPage() {
     setFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const retryAnalysis = async (result) => {
+    try {
+      const analysisResult = await analyzeMutation.mutateAsync({
+        candidateId: result.candidate_id,
+        jobId: result.job_id || null,
+      })
+      setResults((current) => current.map((item) => item.candidate_id === result.candidate_id
+        ? {
+            ...item,
+            status: 'success',
+            ats_score: analysisResult?.analysis?.ats_score || 0,
+            rank: analysisResult?.analysis?.rank || 'pending',
+          }
+        : item))
+    } catch {
+      // The mutation displays the actionable server error.
+    }
+  }
+
   const handleUpload = async () => {
     if (files.length === 0) return
     setProcessing(true)
@@ -54,6 +74,7 @@ export default function UploadPage() {
             filename: item.filename,
             status: 'success',
             candidate_id: item.candidate_id,
+            job_id: selectedJob || null,
             ats_score: analysisResult?.analysis?.ats_score || 0,
             rank: analysisResult?.analysis?.rank || 'pending',
           })
@@ -62,6 +83,7 @@ export default function UploadPage() {
             filename: item.filename,
             status: 'partial',
             candidate_id: item.candidate_id,
+            job_id: selectedJob || null,
           })
         }
       }
@@ -184,11 +206,27 @@ export default function UploadPage() {
                       )}
                       <div>
                         <p className="text-sm font-medium">{r.filename}</p>
-                        <p className="text-xs text-dark-400 capitalize">{r.rank || 'Processing'}</p>
+                        <p className="text-xs text-dark-400 capitalize">
+                          {r.status === 'partial' ? 'Uploaded; AI analysis failed' : r.rank || 'Complete'}
+                        </p>
                       </div>
                     </div>
                     {r.ats_score > 0 && (
                       <span className="text-sm font-bold text-primary-400">{r.ats_score.toFixed(1)}</span>
+                    )}
+                    {r.status === 'partial' && (
+                      <div className="flex items-center gap-3">
+                        <Link to={`/dashboard/candidates/${r.candidate_id}`} className="text-xs text-primary-400 hover:text-primary-300">
+                          View candidate
+                        </Link>
+                        <button
+                          onClick={() => retryAnalysis(r)}
+                          disabled={analyzeMutation.isPending}
+                          className="text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50"
+                        >
+                          Retry analysis
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}

@@ -1,4 +1,4 @@
-import os
+import asyncio
 import logging
 from typing import Optional
 from uuid import UUID, uuid4
@@ -14,6 +14,8 @@ from app.repositories.candidate_repo import CandidateRepository
 from app.ai.service import ai_service
 from app.ai.parser import extract_text, clean_resume_text, calculate_total_experience, determine_rank
 from app.core.config import settings
+from app.storage import save_resume, read_resume, ensure_storage_ready
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,18 +25,32 @@ class CandidateService:
         self.db = db
         self.repo = CandidateRepository(db)
 
+    async def create_candidate(self, payload) -> Candidate:
+        candidate = Candidate(
+            name=payload.name.strip(),
+            email=payload.email,
+            phone=payload.phone,
+            location=payload.location,
+            linkedin_url=payload.linkedin_url,
+            github_url=payload.github_url,
+            portfolio_url=payload.portfolio_url,
+            total_experience_years=payload.total_experience_years,
+            job_id=payload.job_id,
+            status="manual",
+            rank="pending",
+        )
+        return await self.repo.create(candidate)
+
     async def upload_resume(self, user_id: UUID, file_content: bytes, filename: str, file_type: str, job_id: Optional[UUID] = None) -> dict:
+        ensure_storage_ready()
         candidate = Candidate(name="Pending", status="uploaded", rank="pending", job_id=job_id)
         candidate = await self.repo.create(candidate)
 
         file_id = uuid4()
         ext = file_type.lower().replace(".", "")
         save_name = f"{file_id}.{ext}"
-        upload_dir = os.path.join(settings.UPLOAD_DIR, "resumes")
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, save_name)
-        with open(file_path, "wb") as f:
-            f.write(file_content)
+        content_types = {"pdf": "application/pdf", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "doc": "application/msword"}
+        file_path = await save_resume(save_name, file_content, content_types.get(ext))
 
         resume = Resume(
             filename=save_name,
@@ -53,7 +69,7 @@ class CandidateService:
 
         return {"candidate_id": str(candidate.id), "resume_id": str(resume.id), "status": "uploaded"}
 
-    async def parse_resume(self, candidate_id: UUID) -> dict:
+    async def  parse_resume(self, candidate_id: UUID) -> dict:
         candidate = await self.repo.get_by_id(candidate_id)
         if not candidate:
             raise ValueError("Candidate not found")
@@ -66,9 +82,18 @@ class CandidateService:
         await self.db.commit()
 
         try:
-            with open(resume.file_path, "rb") as f:
-                file_content = f.read()
+            file_content = await read_resume(resume.file_path)
+            logger.info("========== START PARSING ==========")
+            logger.info(f"Resume file: {resume.file_path}")
+            logger.info(f"Resume type: {resume.file_type}")
+            logger.info(f"Resume size: {len(file_content)} bytes")
             raw_text = extract_text(file_content, resume.file_type)
+            logger.info(f"Extracted text length: {len(raw_text)}")
+            if raw_text:
+                logger.info("First 500 characters:")
+                logger.info(raw_text[:500])
+            else:
+                logger.error("NO TEXT EXTRACTED")
             if not raw_text:
                 raise ValueError("Could not extract text from resume")
             cleaned_text = clean_resume_text(raw_text)
@@ -167,7 +192,9 @@ class CandidateService:
         if not candidate:
             raise ValueError("Candidate not found")
 
-        if candidate.status not in ("parsed", "analyzed"):
+        if candidate.status not in ("parsed", "analyzed", "analyzing", "error"):
+            raise ValueError("Resume must be parsed before analysis")
+        if not candidate.resume or not candidate.resume.parsed_data:
             raise ValueError("Resume must be parsed before analysis")
 
         candidate.status = "analyzing"
@@ -211,19 +238,42 @@ class CandidateService:
             ) if candidate.certifications else ""
             candidate_experience = candidate.total_experience_years or 0.0
 
-            ats_data = await ai_service.calculate_ats_score(
-                job_description=job_description,
-                required_skills=required_skills,
-                preferred_skills=preferred_skills,
-                experience_min=experience_min,
-                experience_max=experience_max,
-                education_level=education_level,
-                candidate_name=candidate.name,
-                candidate_skills=candidate_skills,
-                candidate_experience=candidate_experience,
-                candidate_education=candidate_education,
-                candidate_projects=candidate_projects,
-                candidate_certifications=candidate_certifications,
+            ats_data, summary_data, match_data = await asyncio.gather(
+                ai_service.calculate_ats_score(
+                    job_description=job_description,
+                    required_skills=required_skills,
+                    preferred_skills=preferred_skills,
+                    experience_min=experience_min,
+                    experience_max=experience_max,
+                    education_level=education_level,
+                    candidate_name=candidate.name,
+                    candidate_skills=candidate_skills,
+                    candidate_experience=candidate_experience,
+                    candidate_education=candidate_education,
+                    candidate_projects=candidate_projects,
+                    candidate_certifications=candidate_certifications,
+                ),
+                ai_service.generate_resume_summary(
+                    candidate_name=candidate.name,
+                    candidate_skills=candidate_skills,
+                    candidate_experience=candidate_experience,
+                    candidate_education=candidate_education,
+                    candidate_projects=candidate_projects,
+                    candidate_certifications=candidate_certifications,
+                    job_title=job_title,
+                ),
+                ai_service.match_jd(
+                    job_description=job_description,
+                    job_requirements=job_description,
+                    required_skills=required_skills,
+                    preferred_skills=preferred_skills,
+                    candidate_name=candidate.name,
+                    candidate_skills=candidate_skills,
+                    candidate_experience=candidate_experience,
+                    candidate_education=candidate_education,
+                    candidate_projects=candidate_projects,
+                    candidate_certifications=candidate_certifications,
+                ),
             )
 
             existing_ats = await self.db.execute(
@@ -238,32 +288,10 @@ class CandidateService:
                 ats_result = ATSResult(candidate_id=candidate_id, **ats_data)
                 self.db.add(ats_result)
 
-            summary_data = await ai_service.generate_resume_summary(
-                candidate_name=candidate.name,
-                candidate_skills=candidate_skills,
-                candidate_experience=candidate_experience,
-                candidate_education=candidate_education,
-                candidate_projects=candidate_projects,
-                candidate_certifications=candidate_certifications,
-                job_title=job_title,
-            )
             candidate.ai_summary = summary_data.get("summary", "")
             candidate.ai_strengths = summary_data.get("strengths", [])
             candidate.ai_weaknesses = summary_data.get("weaknesses", [])
             candidate.ai_career_highlights = summary_data.get("career_highlights", [])
-
-            match_data = await ai_service.match_jd(
-                job_description=job_description,
-                job_requirements=job_description,
-                required_skills=required_skills,
-                preferred_skills=preferred_skills,
-                candidate_name=candidate.name,
-                candidate_skills=candidate_skills,
-                candidate_experience=candidate_experience,
-                candidate_education=candidate_education,
-                candidate_projects=candidate_projects,
-                candidate_certifications=candidate_certifications,
-            )
 
             existing_analysis = await self.db.execute(
                 select(AIAnalysis).where(AIAnalysis.candidate_id == candidate_id)
@@ -288,14 +316,31 @@ class CandidateService:
                 )
                 self.db.add(analysis)
 
-            recommendation_data = await ai_service.get_hiring_recommendation(
-                job_title=job_title,
-                job_description=job_description,
-                candidate_name=candidate.name,
-                ats_score=ats_data.get("total_score", 0),
-                match_score=match_data.get("match_score", 0),
-                candidate_skills=candidate_skills,
-                candidate_experience=candidate_experience,
+            recommendation_data, skill_gap_data, questions_data = await asyncio.gather(
+                ai_service.get_hiring_recommendation(
+                    job_title=job_title,
+                    job_description=job_description,
+                    candidate_name=candidate.name,
+                    ats_score=ats_data.get("total_score", 0),
+                    match_score=match_data.get("match_score", 0),
+                    candidate_skills=candidate_skills,
+                    candidate_experience=candidate_experience,
+                ),
+                ai_service.analyze_skill_gap(
+                    job_description=job_description,
+                    required_skills=required_skills,
+                    preferred_skills=preferred_skills,
+                    candidate_skills=candidate_skills,
+                    candidate_experience=candidate_experience,
+                ),
+                ai_service.generate_interview_questions(
+                    job_description=job_description,
+                    candidate_name=candidate.name,
+                    candidate_skills=candidate_skills,
+                    candidate_experience=candidate_experience,
+                    candidate_education=candidate_education,
+                    candidate_projects=candidate_projects,
+                ),
             )
             analysis.summary = recommendation_data.get("reasoning", "")
             analysis.strengths = recommendation_data.get("key_strengths", [])
@@ -309,26 +354,11 @@ class CandidateService:
             candidate.rank = determine_rank(ats_total, match_score)
             candidate.status = "analyzed"
 
-            skill_gap_data = await ai_service.analyze_skill_gap(
-                job_description=job_description,
-                required_skills=required_skills,
-                preferred_skills=preferred_skills,
-                candidate_skills=candidate_skills,
-                candidate_experience=candidate_experience,
-            )
             ats_result.matched_skills = skill_gap_data.get("matched_skills", [])
             ats_result.missing_skills = skill_gap_data.get("missing_skills", [])
             ats_result.recommended_skills = skill_gap_data.get("recommended_skills", [])
             ats_result.learning_roadmap = skill_gap_data.get("learning_roadmap", [])
 
-            questions_data = await ai_service.generate_interview_questions(
-                job_description=job_description,
-                candidate_name=candidate.name,
-                candidate_skills=candidate_skills,
-                candidate_experience=candidate_experience,
-                candidate_education=candidate_education,
-                candidate_projects=candidate_projects,
-            )
             for q in questions_data.get("questions", []):
                 question = InterviewQuestion(
                     candidate_id=candidate_id,
@@ -357,8 +387,23 @@ class CandidateService:
     async def get_candidate(self, candidate_id: UUID) -> Optional[Candidate]:
         return await self.repo.get_by_id(candidate_id)
 
-    async def list_candidates(self, skip: int = 0, limit: int = 100) -> list[Candidate]:
-        return await self.repo.list_with_relations(skip, limit)
+    async def list_candidates(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        search: Optional[str] = None,
+        rank: Optional[str] = None,
+        job_id: Optional[UUID] = None,
+        unassigned: bool = False,
+    ) -> list[Candidate]:
+        return await self.repo.list_with_relations(
+            skip=skip,
+            limit=limit,
+            search=search,
+            rank=rank,
+            job_id=job_id,
+            unassigned=unassigned,
+        )
 
     async def list_by_job(self, job_id: UUID, skip: int = 0, limit: int = 100) -> list[Candidate]:
         return await self.repo.list_by_job(job_id, skip, limit)

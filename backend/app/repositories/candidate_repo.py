@@ -66,14 +66,37 @@ class CandidateRepository:
         )
         return list(result.scalars().all())
 
-    async def list_with_relations(self, skip: int = 0, limit: int = 100) -> list[Candidate]:
-        result = await self.db.execute(
-            select(Candidate)
-            .options(
-                selectinload(Candidate.skills).selectinload(CandidateSkill.skill),
-                selectinload(Candidate.resume),
-                selectinload(Candidate.ats_result),
+    async def list_with_relations(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        search: Optional[str] = None,
+        rank: Optional[str] = None,
+        job_id: Optional[UUID] = None,
+        unassigned: bool = False,
+    ) -> list[Candidate]:
+        query = select(Candidate).options(
+            selectinload(Candidate.skills).selectinload(CandidateSkill.skill),
+            selectinload(Candidate.resume),
+            selectinload(Candidate.ats_result),
+        )
+        if search:
+            query = query.where(
+                or_(
+                    Candidate.name.ilike(f"%{search}%"),
+                    Candidate.email.ilike(f"%{search}%"),
+                    Candidate.location.ilike(f"%{search}%"),
+                )
             )
+        if rank:
+            query = query.where(Candidate.rank == rank)
+        if unassigned:
+            query = query.where(Candidate.job_id.is_(None))
+        elif job_id:
+            query = query.where(Candidate.job_id == job_id)
+
+        result = await self.db.execute(
+            query
             .offset(skip)
             .limit(limit)
             .order_by(Candidate.created_at.desc())

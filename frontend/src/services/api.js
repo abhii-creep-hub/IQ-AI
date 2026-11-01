@@ -74,6 +74,7 @@ export const jobsAPI = {
 
 export const candidatesAPI = {
   list: (params) => api.get('/candidates/', { params }),
+  create: (data) => api.post('/candidates/', data),
   get: (id) => api.get(`/candidates/${id}`),
   update: (id, params) => api.put(`/candidates/${id}`, null, { params }),
   delete: (id) => api.delete(`/candidates/${id}`),
@@ -89,7 +90,52 @@ export const candidatesAPI = {
   }),
   parseAndAnalyze: (id, jobId) => api.post(`/candidates/${id}/parse-and-analyze`, null, {
     params: jobId ? { job_id: jobId } : {},
+    timeout: 150000,
   }),
+}
+
+export const pipelineAPI = {
+  list: (params) => api.get('/pipeline/', { params }),
+  updateStage: (candidateId, stage) => api.patch(`/pipeline/candidates/${candidateId}/stage`, { stage }),
+  history: (candidateId) => api.get(`/pipeline/candidates/${candidateId}/history`),
+}
+
+export const interviewsAPI = {
+  list: (params) => api.get('/interviews/', { params }),
+  get: (id) => api.get(`/interviews/${id}`),
+  create: (data) => api.post('/interviews/', data),
+  update: (id, data) => api.patch(`/interviews/${id}`, data),
+  cancel: (id) => api.post(`/interviews/${id}/cancel`),
+  complete: (id) => api.post(`/interviews/${id}/complete`),
+  saveFeedback: (id, data) => api.put(`/interviews/${id}/feedback`, data),
+  getFeedback: (id) => api.get(`/interviews/${id}/feedback`),
+}
+
+export const aiInterviewsAPI = {
+  candidates: (params) => api.get('/ai-interviews/candidates', { params }),
+  jobs: (params) => api.get('/ai-interviews/jobs', { params }),
+  list: (params) => api.get('/ai-interviews/sessions', { params }),
+  get: (id) => api.get(`/ai-interviews/sessions/${id}`),
+  create: (data) => api.post('/ai-interviews/sessions', data),
+  generate: (id) => api.post(`/ai-interviews/sessions/${id}/generate`),
+  start: (id) => api.post(`/ai-interviews/sessions/${id}/start`),
+  pause: (id) => api.post(`/ai-interviews/sessions/${id}/pause`),
+  saveAnswer: (id, questionId, data) => api.put(`/ai-interviews/sessions/${id}/questions/${questionId}/answer`, data),
+  transcribeAnswer: (id, questionId, blob, durationSeconds) => {
+    const formData = new FormData()
+    formData.append('audio', blob, `interview-answer.${blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'mp4' : 'webm'}`)
+    formData.append('duration_seconds', String(durationSeconds))
+    return api.post(`/ai-interviews/sessions/${id}/questions/${questionId}/transcribe`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 90000,
+    })
+  },
+  evaluateAnswer: (id, questionId) => api.post(`/ai-interviews/sessions/${id}/questions/${questionId}/evaluate`),
+  followUp: (id, questionId) => api.post(`/ai-interviews/sessions/${id}/questions/${questionId}/follow-up`),
+  appendLiveFollowUp: (id, questionId) => api.post(`/ai-interviews/sessions/${id}/questions/${questionId}/live-follow-up`),
+  complete: (id) => api.post(`/ai-interviews/sessions/${id}/complete`),
+  report: (id) => api.get(`/ai-interviews/sessions/${id}/report`),
+  review: (id, data) => api.patch(`/ai-interviews/sessions/${id}/review`, data),
 }
 
 export const dashboardAPI = {
@@ -101,6 +147,11 @@ export const dashboardAPI = {
 export const reportsAPI = {
   getFullReport: (candidateId) => api.get(`/reports/candidate/${candidateId}/full`),
   getRanking: (jobId) => api.get('/reports/ranking', { params: jobId ? { job_id: jobId } : {} }),
+  compareCandidates: (candidateIds) => {
+    const params = new URLSearchParams()
+    candidateIds.forEach((id) => params.append('candidate_ids', id))
+    return api.get(`/reports/compare?${params.toString()}`)
+  },
 }
 
 export const usersAPI = {

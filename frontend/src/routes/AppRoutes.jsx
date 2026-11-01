@@ -10,8 +10,16 @@ import JobsPage from '../pages/JobsPage'
 import JobDetailPage from '../pages/JobDetailPage'
 import CandidatesPage from '../pages/CandidatesPage'
 import CandidateDetailPage from '../pages/CandidateDetailPage'
+import CandidateComparisonPage from '../pages/CandidateComparisonPage'
 import ReportsPage from '../pages/ReportsPage'
 import SettingsPage from '../pages/SettingsPage'
+import ForgotPasswordPage from '../pages/ForgotPasswordPage'
+import ResetPasswordPage from '../pages/ResetPasswordPage'
+import PipelinePage from '../pages/PipelinePage'
+import InterviewsPage from '../pages/InterviewsPage'
+import InterviewDetailPage from '../pages/InterviewDetailPage'
+import AIInterviewAssistantPage from '../pages/AIInterviewAssistantPage'
+import AIInterviewSessionPage from '../pages/AIInterviewSessionPage'
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -39,6 +47,8 @@ export default function AppRoutes() {
       <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/dashboard"
         element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}
@@ -48,6 +58,12 @@ export default function AppRoutes() {
         <Route path="jobs" element={<JobsPage />} />
         <Route path="jobs/:id" element={<JobDetailPage />} />
         <Route path="candidates" element={<CandidatesPage />} />
+        <Route path="pipeline" element={<PipelinePage />} />
+        <Route path="interviews" element={<InterviewsPage />} />
+        <Route path="interviews/:id" element={<InterviewDetailPage />} />
+        <Route path="ai-interview" element={<AIInterviewAssistantPage />} />
+        <Route path="ai-interview/:id" element={<AIInterviewSessionPage />} />
+        <Route path="candidates/compare" element={<CandidateComparisonPage />} />
         <Route path="candidates/:id" element={<CandidateDetailPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />

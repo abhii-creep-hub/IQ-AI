@@ -5,10 +5,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from app.database.base import Base
 from app.core.config import settings
+from app.database.url import normalize_database_url
 from app.models import *  # noqa: import all models
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", normalize_database_url(settings.DATABASE_URL).replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

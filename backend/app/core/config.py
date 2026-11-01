@@ -1,6 +1,7 @@
 import os
+import json
 from pathlib import Path
-from typing import List
+from typing import Any, List
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 
@@ -15,8 +16,9 @@ class Settings(BaseSettings):
 
     BACKEND_PORT: int = 8000
     BACKEND_HOST: str = "0.0.0.0"
+    FRONTEND_URL: str = "http://localhost:5173"
 
-    DATABASE_URL: str = "postgresql+asyncpg://iqai_user:password@localhost:5432/iqai_db"
+    DATABASE_URL: str = "sqlite+aiosqlite:///./iqai.db"
     DATABASE_ECHO: bool = False
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 10
@@ -26,10 +28,16 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
-    OPENAI_TEMPERATURE: float = 0.3
-    OPENAI_MAX_TOKENS: int = 4096
+    GEMINI_API_KEY: str = ""
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
+    GEMINI_AUDIO_MODEL: str = "gemini-2.5-flash-lite"
+    GEMINI_REST_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
+    AI_TEMPERATURE: float = 0.3
+    AI_MAX_TOKENS: int = 4096
+    AI_REQUEST_TIMEOUT_SECONDS: float = 45.0
+    AI_AUDIO_MAX_SIZE_MB: int = 10
+    AI_AUDIO_MAX_SECONDS: int = 120
 
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE_MB: int = 20
@@ -38,10 +46,11 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_BUCKET_NAME: str = ""
-    AWS_REGION: str = "us-east-1"
+    AWS_REGION: str = "us-east-2"
+    AWS_ENDPOINT_URL_S3: str = ""
     USE_S3: bool = False
 
-    CORS_ORIGINS: str = '["http://localhost:5173","http://localhost:3000"]'
+    CORS_ORIGINS: Any = '["http://localhost:5173","http://localhost:3000","http://localhost"]'
 
     RATE_LIMIT_PER_MINUTE: int = 60
 
@@ -56,24 +65,26 @@ class Settings(BaseSettings):
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v):
+    def parse_cors_origins(cls, v: Any) -> List[str]:
+        if isinstance(v, list):
+            return v
         if isinstance(v, str):
-            import json
             try:
                 return json.loads(v)
             except json.JSONDecodeError:
                 return [origin.strip() for origin in v.split(",")]
-        return v
+        return ["http://localhost:5173"]
 
     @property
     def cors_origins_list(self) -> List[str]:
+        if isinstance(self.CORS_ORIGINS, list):
+            return self.CORS_ORIGINS
         if isinstance(self.CORS_ORIGINS, str):
-            import json
             try:
                 return json.loads(self.CORS_ORIGINS)
             except json.JSONDecodeError:
                 return [o.strip() for o in self.CORS_ORIGINS.split(",")]
-        return self.CORS_ORIGINS
+        return ["http://localhost:5173"]
 
     @property
     def allowed_extensions_list(self) -> List[str]:
@@ -87,6 +98,7 @@ class Settings(BaseSettings):
         "env_file": ".env",
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
+        "extra": "ignore",
     }
 
 

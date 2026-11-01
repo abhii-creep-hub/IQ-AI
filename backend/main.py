@@ -30,26 +30,6 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created/verified")
 
-    from app.database.session import AsyncSessionLocal
-    from app.models.user import User
-    from app.core.security import get_password_hash
-    from sqlalchemy import select
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(User).where(User.email == "admin@iq-ai.com"))
-        if not result.scalar_one_or_none():
-            admin = User(
-                email="admin@iq-ai.com",
-                username="admin",
-                full_name="Admin User",
-                hashed_password=get_password_hash("admin123"),
-                role="admin",
-                is_active=True,
-                is_verified=True,
-            )
-            session.add(admin)
-            await session.commit()
-            logger.info("Admin user created: admin@iq-ai.com / admin123")
-
     yield
     logger.info("Shutting down application")
     await async_engine.dispose()

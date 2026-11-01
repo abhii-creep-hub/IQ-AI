@@ -2,6 +2,7 @@ from typing import Optional
 from uuid import UUID
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from app.models.job import Job
 
 
@@ -35,6 +36,7 @@ class JobRepository:
     async def list_by_owner(self, owner_id: UUID, skip: int = 0, limit: int = 100) -> list[Job]:
         result = await self.db.execute(
             select(Job)
+            .options(selectinload(Job.candidates))
             .where(Job.owner_id == owner_id)
             .offset(skip)
             .limit(limit)
@@ -44,7 +46,11 @@ class JobRepository:
 
     async def list_all(self, skip: int = 0, limit: int = 100) -> list[Job]:
         result = await self.db.execute(
-            select(Job).offset(skip).limit(limit).order_by(Job.created_at.desc())
+            select(Job)
+            .options(selectinload(Job.candidates))
+            .offset(skip)
+            .limit(limit)
+            .order_by(Job.created_at.desc())
         )
         return list(result.scalars().all())
 
@@ -59,7 +65,7 @@ class JobRepository:
         query = select(Job).where(
             Job.title.ilike(f"%{query_str}%")
             | Job.description.ilike(f"%{query_str}%")
-        )
+        ).options(selectinload(Job.candidates))
         if owner_id:
             query = query.where(Job.owner_id == owner_id)
         result = await self.db.execute(query)

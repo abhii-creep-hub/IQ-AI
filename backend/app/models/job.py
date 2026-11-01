@@ -30,3 +30,4 @@ class Job(Base):
 
     owner = relationship("User", back_populates="jobs")
     candidates = relationship("Candidate", back_populates="job", cascade="all, delete-orphan")
+    interviews = relationship("Interview", back_populates="job")

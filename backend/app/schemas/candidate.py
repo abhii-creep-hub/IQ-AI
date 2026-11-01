@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, AliasPath, BaseModel, Field
 
 
 class EducationSchema(BaseModel):
@@ -12,6 +12,8 @@ class EducationSchema(BaseModel):
     end_year: Optional[int] = None
     gpa: Optional[str] = None
     description: Optional[str] = None
+
+    model_config = {"from_attributes": True}
 
 
 class ExperienceSchema(BaseModel):
@@ -24,6 +26,8 @@ class ExperienceSchema(BaseModel):
     description: Optional[str] = None
     achievements: Optional[List[str]] = []
 
+    model_config = {"from_attributes": True}
+
 
 class ProjectSchema(BaseModel):
     name: str
@@ -34,6 +38,8 @@ class ProjectSchema(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
 
+    model_config = {"from_attributes": True}
+
 
 class CertificationSchema(BaseModel):
     name: str
@@ -41,6 +47,8 @@ class CertificationSchema(BaseModel):
     date_obtained: Optional[str] = None
     expiry_date: Optional[str] = None
     credential_url: Optional[str] = None
+
+    model_config = {"from_attributes": True}
 
 
 class CandidateBase(BaseModel):
@@ -74,10 +82,15 @@ class CandidateUpdate(BaseModel):
 
 
 class SkillSchema(BaseModel):
-    name: str
-    category: Optional[str] = None
+    name: str = Field(validation_alias=AliasChoices("name", AliasPath("skill", "name")))
+    category: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("category", AliasPath("skill", "category")),
+    )
     proficiency: Optional[str] = None
     years_experience: Optional[float] = None
+
+    model_config = {"from_attributes": True}
 
 
 class CandidateResponse(CandidateBase):

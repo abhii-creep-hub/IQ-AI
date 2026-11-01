@@ -3,13 +3,28 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from app.database.session import get_db
-from app.schemas.candidate import CandidateResponse, CandidateDetailResponse, ResumeUploadResponse
+from app.schemas.candidate import CandidateCreate, CandidateResponse, CandidateDetailResponse, ResumeUploadResponse
 from app.services.candidate_service import CandidateService
 from app.middleware.auth import get_current_user
 from app.models.user import User
 from app.core.config import settings
+from app.services.job_service import JobService
 
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
+
+
+@router.post("/", response_model=CandidateResponse, status_code=status.HTTP_201_CREATED)
+async def create_candidate(
+    payload: CandidateCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if payload.job_id:
+        job = await JobService(db).get_job(payload.job_id)
+        if not job or job.owner_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Job not found")
+    candidate = await CandidateService(db).create_candidate(payload)
+    return candidate
 
 
 @router.post("/upload", response_model=ResumeUploadResponse, status_code=status.HTTP_201_CREATED)
@@ -97,17 +112,27 @@ async def list_candidates(
     limit: int = Query(50, ge=1, le=100),
     search: Optional[str] = Query(None),
     rank: Optional[str] = Query(None),
+    job_id: Optional[UUID] = Query(None),
+    unassigned: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if job_id and unassigned:
+        raise HTTPException(status_code=400, detail="Choose a job or unassigned candidates, not both")
+    if job_id:
+        job = await JobService(db).get_job(job_id)
+        if not job or job.owner_id != current_user.id:
+            raise HTTPException(status_code=404, detail="Job not found")
+
     service = CandidateService(db)
-    if search:
-        candidates = await service.search_candidates(search)
-    else:
-        candidates = await service.list_candidates(skip, limit)
-    if rank:
-        candidates = [c for c in candidates if c.rank == rank]
-    return candidates
+    return await service.list_candidates(
+        skip=skip,
+        limit=limit,
+        search=search,
+        rank=rank,
+        job_id=job_id,
+        unassigned=unassigned,
+    )
 
 
 @router.get("/{candidate_id}", response_model=CandidateDetailResponse)

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 export default function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const { register, handleSubmit, formState: { errors } } = useForm()
@@ -45,7 +46,7 @@ export default function LoginPage() {
             <span className="text-2xl font-bold text-gradient">IQ-AI</span>
           </div>
           <h2 className="text-xl font-semibold text-center mb-1">Welcome back</h2>
-          <p className="text-dark-400 text-sm text-center mb-6">Sign in to your account</p>
+          <p className="text-dark-400 text-sm text-center mb-6">{location.state?.message || 'Sign in to your account'}</p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
